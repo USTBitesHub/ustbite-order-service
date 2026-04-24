@@ -5,17 +5,17 @@ on:
     branches:
       - main
       - develop
+  pull_request:
+    branches:
+      - main
+      - develop
+
+permissions:
+  contents: write
 
 jobs:
-  build:
-    uses: USTBitesHub/ustbite-workflows/.github/workflows/generate-tag-and-build-image-trivy.yaml@main
-    with:
-      service_name: "order-service"
-      service_path: "./"
-    secrets: inherit
-
   scan:
-    needs: build
+    if: github.event_name == 'pull_request'
     uses: USTBitesHub/ustbite-workflows/.github/workflows/sonar-and-snyk.yaml@main
     with:
       service_name: "order-service"
@@ -23,18 +23,36 @@ jobs:
       runtime: "python"
     secrets: inherit
 
+  build-pr:
+    needs: scan
+    if: github.event_name == 'pull_request'
+    uses: USTBitesHub/ustbite-workflows/.github/workflows/generate-tag-and-build-image-trivy.yaml@main
+    with:
+      service_name: "order-service"
+      service_path: "./"
+    secrets: inherit
+
+  build-push:
+    if: github.event_name == 'push'
+    uses: USTBitesHub/ustbite-workflows/.github/workflows/generate-tag-and-build-image-trivy.yaml@main
+    with:
+      service_name: "order-service"
+      service_path: "./"
+    secrets: inherit
+
   push-image:
-    needs: [build, scan]
+    needs: build-push
+    if: github.event_name == 'push' && needs.build-push.result == 'success'
     uses: USTBitesHub/ustbite-workflows/.github/workflows/push.yaml@main
     with:
       service_name: "order-service"
-      git_tag: ${{ needs.build.outputs.tag }}
-      tag_exists: ${{ needs.build.outputs.tag_exists }}
+      git_tag: ${{ needs.build-push.outputs.tag }}
+      tag_exists: ${{ needs.build-push.outputs.tag_exists }}
     secrets: inherit
 
   prod-gate:
     needs: push-image
-    if: github.ref_name == 'main'
+    if: github.event_name == 'push' && github.ref_name == 'main'
     runs-on: ubuntu-latest
     environment: production
     steps:
@@ -42,23 +60,24 @@ jobs:
 
   helm-update:
     needs: [push-image, prod-gate]
-    if: always() && needs.push-image.result == 'success' && (github.ref_name != 'main' || needs.prod-gate.result == 'success')
+    if: always() && github.event_name == 'push' && needs.push-image.result == 'success' && (needs.prod-gate.result == 'success' || needs.prod-gate.result == 'skipped')
     uses: USTBitesHub/ustbite-workflows/.github/workflows/helm-updater-job.yaml@main
     with:
       service_name: "order-service"
       image_tag: ${{ needs.push-image.outputs.tag }}
-      helm_values_path: "charts/order-service/values.yaml"
       target_branch: ${{ github.ref_name }}
     secrets: inherit
 
   notify-status:
-    if: always()
-    needs: [build, scan, push-image, helm-update]
+    if: always() && github.event_name == 'push'
+    needs: [build-push, push-image, prod-gate, helm-update]
     uses: USTBitesHub/ustbite-workflows/.github/workflows/notify.yaml@main
     with:
       service_name: "order-service"
       git_tag: ${{ needs.push-image.outputs.tag || 'N/A' }}
-      build_result: ${{ needs.build.result }}
-      sonarqube_result: ${{ needs.scan.result }}
-      push_result: ${{ needs.push-image.result }}
+      sonarqube_result: "skipped"
+      snyk_result: "skipped"
+      build_result: ${{ needs.build-push.outputs.build_result || 'skipped' }}
+      trivy_result: ${{ needs.build-push.outputs.trivy_result || 'skipped' }}
+      push_result: ${{ needs.push-image.result || 'skipped' }}
     secrets: inherit
