@@ -6,7 +6,7 @@ from app.dependencies import get_user_headers
 from app.schemas import StandardResponse, OrderResponse, OrderCreate, OrderStatusUpdate
 from app.services import order_service
 from app.events.publisher import publish_event
-from app.models import OrderStatusEnum
+from app.models.models import OrderStatusEnum
 from app.config import settings
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
