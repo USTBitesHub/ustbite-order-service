@@ -1,8 +1,8 @@
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
-from .models import Order, OrderItem, OrderStatusEnum
-from .schemas import OrderCreate, OrderStatusUpdate
+from app.models.models import Order, OrderItem, OrderStatusEnum
+from app.schemas import OrderCreate, OrderStatusUpdate
 
 async def get_order(db: AsyncSession, order_id: str):
     result = await db.execute(select(Order).options(selectinload(Order.items)).filter(Order.id == order_id))
