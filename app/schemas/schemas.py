@@ -3,7 +3,7 @@ from typing import Optional, List
 from datetime import datetime
 from uuid import UUID
 from decimal import Decimal
-from .models import OrderStatusEnum
+from app.models.models import OrderStatusEnum
 
 class StandardResponse(BaseModel):
     data: Optional[dict | list] = None
