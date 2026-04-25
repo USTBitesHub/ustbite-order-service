@@ -17,11 +17,15 @@ depends_on = None
 
 
 def upgrade() -> None:
-    # Convert the enum-typed column to plain TEXT
+    # 1. Drop the enum-referencing DEFAULT first (it holds a reference to the type)
+    op.execute("ALTER TABLE orders ALTER COLUMN status DROP DEFAULT")
+    # 2. Convert column from enum to plain TEXT
     op.execute("ALTER TABLE orders ALTER COLUMN status TYPE TEXT USING status::text")
-    # Drop the now-unused PostgreSQL enum type
-    op.execute("DROP TYPE IF EXISTS order_status_enum")
-    op.execute("DROP TYPE IF EXISTS orderstatusenum")
+    # 3. Restore the default as a plain string (no enum dependency)
+    op.execute("ALTER TABLE orders ALTER COLUMN status SET DEFAULT 'PENDING'")
+    # 4. Now safe to drop the enum types
+    op.execute("DROP TYPE IF EXISTS order_status_enum CASCADE")
+    op.execute("DROP TYPE IF EXISTS orderstatusenum CASCADE")
 
 
 def downgrade() -> None:
