@@ -36,14 +36,14 @@ async def place_order(payload: OrderCreate, db: AsyncSession = Depends(get_db), 
     except Exception as e:
         print(f"[warn] publish_event order.placed failed (non-fatal): {e}")
     
-    # Synchronous call to payment service
+    # Call payment service to create payment record (and Razorpay order if configured)
+    payment_info: dict = {}
     try:
         async with httpx.AsyncClient() as client:
             payment_payload = {
                 "order_id": str(order.id),
                 "amount": float(order.total_amount),
                 "method": payload.payment_method,
-                # Rich context for notification emails
                 "user_email": headers.get("email", ""),
                 "user_name": headers.get("name", "User"),
                 "restaurant_name": payload.restaurant_name_snapshot,
@@ -61,10 +61,20 @@ async def place_order(payload: OrderCreate, db: AsyncSession = Depends(get_db), 
                 headers={"X-User-ID": user_id, "Authorization": headers.get("raw_auth", "")},
                 timeout=10.0,
             )
+            if resp.status_code == 200:
+                resp_json = resp.json()
+                pd = resp_json.get("data") or {}
+                payment_info = {
+                    "payment_id": pd.get("id"),
+                    "razorpay_order_id": pd.get("razorpay_order_id"),
+                    "razorpay_key_id": pd.get("razorpay_key_id"),
+                }
     except Exception as e:
-        print(f"Failed to reach payment service: {e}")
-        
-    return format_response(OrderResponse.model_validate(order).model_dump(mode="json"), "Order placed")
+        print(f"[warn] Failed to reach payment service (non-fatal): {e}")
+
+    order_data = OrderResponse.model_validate(order).model_dump(mode="json")
+    order_data["payment_info"] = payment_info
+    return format_response(order_data, "Order placed")
 
 @router.get("/me", response_model=StandardResponse)
 async def get_my_orders(page: int = Query(1, ge=1), limit: int = Query(20, le=100), db: AsyncSession = Depends(get_db), headers: dict = Depends(get_user_headers)):
@@ -117,5 +127,4 @@ async def track_order(id: str, db: AsyncSession = Depends(get_db)):
     order = await order_service.get_order(db, id)
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
-    # Simplified tracking
-    return format_response({"status": order.status, "updated_at": order.updated_at.isoformat() if order.updated_at else None})
+    return format_response(OrderResponse.model_validate(order).model_dump(mode="json"))
