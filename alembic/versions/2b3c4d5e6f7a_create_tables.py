@@ -13,6 +13,8 @@ depends_on = None
 
 
 def upgrade() -> None:
+    # asyncpg requires ONE statement per op.execute() call
+
     op.execute("""
         DO $$ BEGIN
             CREATE TYPE order_status_enum AS ENUM (
@@ -20,8 +22,10 @@ def upgrade() -> None:
                 'OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'PAYMENT_FAILED'
             );
         EXCEPTION WHEN duplicate_object THEN NULL;
-        END $$;
+        END $$
+    """)
 
+    op.execute("""
         CREATE TABLE IF NOT EXISTS orders (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             user_id UUID NOT NULL,
@@ -34,9 +38,14 @@ def upgrade() -> None:
             special_instructions VARCHAR,
             created_at TIMESTAMPTZ DEFAULT NOW(),
             updated_at TIMESTAMPTZ
-        );
-        CREATE INDEX IF NOT EXISTS ix_orders_user_id ON orders(user_id);
+        )
+    """)
 
+    op.execute(
+        "CREATE INDEX IF NOT EXISTS ix_orders_user_id ON orders(user_id)"
+    )
+
+    op.execute("""
         CREATE TABLE IF NOT EXISTS order_items (
             id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
             order_id UUID NOT NULL REFERENCES orders(id) ON DELETE CASCADE,
@@ -45,11 +54,11 @@ def upgrade() -> None:
             item_price_snapshot NUMERIC(10,2) NOT NULL,
             quantity INTEGER NOT NULL,
             subtotal NUMERIC(10,2) NOT NULL
-        );
+        )
     """)
 
 
 def downgrade() -> None:
-    op.execute("DROP TABLE IF EXISTS order_items CASCADE;")
-    op.execute("DROP TABLE IF EXISTS orders CASCADE;")
-    op.execute("DROP TYPE IF EXISTS order_status_enum;")
+    op.execute("DROP TABLE IF EXISTS order_items CASCADE")
+    op.execute("DROP TABLE IF EXISTS orders CASCADE")
+    op.execute("DROP TYPE IF EXISTS order_status_enum")
