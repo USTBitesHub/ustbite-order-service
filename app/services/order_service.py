@@ -19,7 +19,7 @@ async def get_user_orders(db: AsyncSession, user_id: str, skip: int = 0, limit: 
 
 async def create_order(db: AsyncSession, user_id: str, payload: OrderCreate):
     items_data = payload.items
-    order_data = payload.model_dump(exclude={"items"})
+    order_data = payload.model_dump(exclude={"items", "payment_method"})
     db_order = Order(**order_data, user_id=user_id)
     db.add(db_order)
     await db.commit()
@@ -36,7 +36,7 @@ async def update_order_status(db: AsyncSession, order_id: str, status: OrderStat
     db_order = await get_order(db, order_id)
     if not db_order:
         return None
-    db_order.status = status
+    db_order.status = status.value if hasattr(status, 'value') else status
     await db.commit()
     await db.refresh(db_order)
     return db_order

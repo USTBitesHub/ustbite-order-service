@@ -22,7 +22,7 @@ class Order(Base):
     user_id = Column(UUID(as_uuid=True), nullable=False)
     restaurant_id = Column(UUID(as_uuid=True), nullable=False)
     restaurant_name_snapshot = Column(String, nullable=False)
-    status = Column(Enum(OrderStatusEnum), default=OrderStatusEnum.PENDING)
+    status = Column(String, default=OrderStatusEnum.PENDING.value)
     total_amount = Column(Numeric(10, 2), nullable=False)
     delivery_floor = Column(String)
     delivery_wing = Column(String)
