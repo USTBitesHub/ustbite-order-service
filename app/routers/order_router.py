@@ -23,15 +23,18 @@ async def place_order(payload: OrderCreate, db: AsyncSession = Depends(get_db), 
     
     order = await order_service.create_order(db, user_id, payload)
     
-    # Publish event
-    items = [{"item_id": str(i.menu_item_id), "quantity": i.quantity} for i in order.items]
-    await publish_event("order.placed", {
-        "order_id": str(order.id),
-        "user_id": user_id,
-        "restaurant_id": str(order.restaurant_id),
-        "items": items,
-        "total": float(order.total_amount)
-    })
+    # Publish event (best-effort — order is already committed to DB)
+    try:
+        items = [{"item_id": str(i.menu_item_id), "quantity": i.quantity} for i in order.items]
+        await publish_event("order.placed", {
+            "order_id": str(order.id),
+            "user_id": user_id,
+            "restaurant_id": str(order.restaurant_id),
+            "items": items,
+            "total": float(order.total_amount)
+        })
+    except Exception as e:
+        print(f"[warn] publish_event order.placed failed (non-fatal): {e}")
     
     # Synchronous call to payment service
     try:
@@ -86,10 +89,13 @@ async def update_status(id: str, payload: OrderStatusUpdate, db: AsyncSession = 
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
         
-    if payload.status == OrderStatusEnum.CONFIRMED:
-        await publish_event("order.confirmed", {"order_id": id, "user_id": str(order.user_id), "restaurant_id": str(order.restaurant_id)})
-    elif payload.status == OrderStatusEnum.DELIVERED:
-        await publish_event("order.delivered", {"order_id": id, "user_id": str(order.user_id)})
+    try:
+        if payload.status == OrderStatusEnum.CONFIRMED:
+            await publish_event("order.confirmed", {"order_id": id, "user_id": str(order.user_id), "restaurant_id": str(order.restaurant_id)})
+        elif payload.status == OrderStatusEnum.DELIVERED:
+            await publish_event("order.delivered", {"order_id": id, "user_id": str(order.user_id)})
+    except Exception as e:
+        print(f"[warn] publish_event status update failed (non-fatal): {e}")
         
     return format_response(OrderResponse.model_validate(order).model_dump(mode="json"))
 
@@ -100,7 +106,10 @@ async def cancel_order(id: str, db: AsyncSession = Depends(get_db), headers: dic
     if not order:
         raise HTTPException(status_code=404, detail="Order not found")
     
-    await publish_event("order.cancelled", {"order_id": id, "user_id": user_id, "reason": "User requested cancel"})
+    try:
+        await publish_event("order.cancelled", {"order_id": id, "user_id": user_id, "reason": "User requested cancel"})
+    except Exception as e:
+        print(f"[warn] publish_event order.cancelled failed (non-fatal): {e}")
     return format_response(OrderResponse.model_validate(order).model_dump(mode="json"), "Order cancelled")
 
 @router.get("/{id}/track", response_model=StandardResponse)
