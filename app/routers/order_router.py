@@ -11,6 +11,7 @@ from app.config import settings
 
 router = APIRouter(prefix="/orders", tags=["Orders"])
 
+
 def format_response(data, message="Success"):
     return {"data": data, "message": message, "status": "success"}
 
@@ -38,10 +39,10 @@ async def place_order(payload: OrderCreate, db: AsyncSession = Depends(get_db), 
             payment_payload = {
                 "order_id": str(order.id),
                 "amount": float(order.total_amount),
-                "method": "UPI" # Defaulting for simplicity
+                "method": getattr(payload, 'payment_method', 'UPI')
             }
             resp = await client.post(
-                "http://ustbite-payment-service:8004/payments",
+                f"{settings.payment_service_url}/payments",
                 json=payment_payload,
                 headers={"X-User-ID": user_id, "X-Trace-ID": x_trace_id or ""}
             )
