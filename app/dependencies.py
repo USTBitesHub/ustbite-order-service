@@ -19,6 +19,7 @@ async def get_user_headers(
             return {
                 "user_id": payload.get("sub"),
                 "email": payload.get("email"),
+                "name": payload.get("name"),
             }
         except jwt.ExpiredSignatureError:
             raise HTTPException(status_code=401, detail="Token expired")

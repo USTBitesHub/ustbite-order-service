@@ -39,15 +39,25 @@ async def place_order(payload: OrderCreate, db: AsyncSession = Depends(get_db), 
             payment_payload = {
                 "order_id": str(order.id),
                 "amount": float(order.total_amount),
-                "method": getattr(payload, 'payment_method', 'UPI')
+                "method": payload.payment_method,
+                # Rich context for notification emails
+                "user_email": headers.get("email", ""),
+                "user_name": headers.get("name", "User"),
+                "restaurant_name": payload.restaurant_name_snapshot,
+                "delivery_floor": payload.delivery_floor,
+                "delivery_wing": payload.delivery_wing,
+                "estimated_minutes": 20,
+                "items": [
+                    {"name": i.item_name_snapshot, "qty": i.quantity, "price": float(i.item_price_snapshot)}
+                    for i in order.items
+                ],
             }
             resp = await client.post(
                 f"{settings.payment_service_url}/payments",
                 json=payment_payload,
-                headers={"X-User-ID": user_id, "X-Trace-ID": x_trace_id or ""}
+                headers={"X-User-ID": user_id, "Authorization": headers.get("raw_auth", "")},
+                timeout=10.0,
             )
-            # We don't wait for it to be SUCCESS, we just initiate it.
-            # Real status updates will come through rabbitmq events.
     except Exception as e:
         print(f"Failed to reach payment service: {e}")
         

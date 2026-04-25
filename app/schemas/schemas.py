@@ -24,6 +24,7 @@ class OrderCreate(BaseModel):
     delivery_floor: Optional[str] = None
     delivery_wing: Optional[str] = None
     special_instructions: Optional[str] = None
+    payment_method: str = "UPI"   # UPI | CARD | CASH_ON_DELIVERY
     items: List[OrderItemCreate]
 
 class OrderStatusUpdate(BaseModel):
